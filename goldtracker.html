@@ -161,11 +161,11 @@
       font-size: 0.85rem; font-weight: bold; display: flex; align-items: center; gap: 6px;
     }
 
-    /* Layout Griglia per i due Grafici */
+    /* Disposizione Verticale (I due grafici uno sotto l'altro) */
     .charts-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
-      gap: 20px;
+      grid-template-columns: 1fr;
+      gap: 25px;
       margin-bottom: 25px;
     }
     
@@ -200,7 +200,6 @@
       body { padding: 10px 15px; }
       header h1 { font-size: 1.8rem; margin-top: 25px; }
       .refresh-btn { top: 8px; left: 8px; padding: 6px 10px; font-size: 0.75rem; }
-      .charts-grid { grid-template-columns: 1fr; }
       .chart-container { height: 320px; padding: 10px; }
     }
   </style>
@@ -269,7 +268,7 @@
       </div>
     </div>
 
-    <!-- Griglia dei Due Grafici -->
+    <!-- Grafici Uno Sotto l'Altro -->
     <div class="charts-grid">
       <!-- 1. Grafico Storico Mensile -->
       <div class="chart-container">
@@ -633,7 +632,6 @@
       const badgeEl = document.getElementById('gold-percentage-gain');
       badgeEl.innerText = (rawGoldGainPerc >= 0 ? '+' : '') + rawGoldGainPerc.toFixed(1) + '%';
       
-      // Aggiorna l'ultimo punto in entrambi i grafici
       if (monthlyChart) {
         monthlyChart.data.datasets[0].data[monthlyChart.data.datasets[0].data.length - 1] = spotPricePerGram;
         monthlyChart.update();
