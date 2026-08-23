@@ -160,6 +160,14 @@
       color: var(--green); padding: 6px 14px; border-radius: 20px;
       font-size: 0.85rem; font-weight: bold; display: flex; align-items: center; gap: 6px;
     }
+
+    /* Layout Griglia per i due Grafici */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 20px;
+      margin-bottom: 25px;
+    }
     
     .table-wrapper { width: 100%; overflow-x: auto; margin-bottom: 25px; border-radius: 16px; border: 1px solid var(--card-border); }
     table { width: 100%; border-collapse: collapse; background: var(--card-bg); backdrop-filter: blur(10px); min-width: 600px; }
@@ -170,8 +178,8 @@
 
     .chart-container { 
       background: var(--card-bg); border: 1px solid var(--card-border); 
-      border-radius: 16px; padding: 20px; margin-bottom: 25px; 
-      position: relative; height: 420px; backdrop-filter: blur(10px);
+      border-radius: 16px; padding: 20px; 
+      position: relative; height: 380px; backdrop-filter: blur(10px);
       box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 100%;
     }
 
@@ -192,6 +200,7 @@
       body { padding: 10px 15px; }
       header h1 { font-size: 1.8rem; margin-top: 25px; }
       .refresh-btn { top: 8px; left: 8px; padding: 6px 10px; font-size: 0.75rem; }
+      .charts-grid { grid-template-columns: 1fr; }
       .chart-container { height: 320px; padding: 10px; }
     }
   </style>
@@ -252,15 +261,25 @@
       </div>
     </div>
 
-    <!-- Grafico Storico Pulito con Badge Incremento -->
+    <!-- Header Sezione Grafici con Badge Incremento -->
     <div class="section-header">
-      <h2 class="section-title">Andamento Quotazione Oro (€/g)</h2>
+      <h2 class="section-title">Analisi Andamento Quotazione Oro (€/g)</h2>
       <div class="growth-badge" id="chart-growth-badge">
         ▲ Incremento Valore Oro: <span id="gold-percentage-gain">+21.5%</span>
       </div>
     </div>
-    <div class="chart-container">
-      <canvas id="goldChart"></canvas>
+
+    <!-- Griglia dei Due Grafici -->
+    <div class="charts-grid">
+      <!-- 1. Grafico Storico Mensile -->
+      <div class="chart-container">
+        <canvas id="monthlyChart"></canvas>
+      </div>
+
+      <!-- 2. Grafico Dettaglio Giornaliero -->
+      <div class="chart-container">
+        <canvas id="dailyChart"></canvas>
+      </div>
     </div>
 
     <!-- Tabella Storico Bonifici -->
@@ -404,41 +423,41 @@
     const REBUY_SPREAD = 0.025;
     const AVG_PURCHASE_PRICE = 100.80;
 
-    let goldChart;
+    let monthlyChart, dailyChart;
 
     function initDashboard() {
       Chart.register(ChartDataLabels);
 
-      const ctx = document.getElementById('goldChart').getContext('2d');
-      
-      const goldGradient = ctx.createLinearGradient(0, 0, 0, 380);
-      goldGradient.addColorStop(0, 'rgba(245, 158, 11, 0.35)');
-      goldGradient.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+      // --- 1. Grafico Mensile (Storico Completo) ---
+      const ctxMonthly = document.getElementById('monthlyChart').getContext('2d');
+      const gradMonthly = ctxMonthly.createLinearGradient(0, 0, 0, 350);
+      gradMonthly.addColorStop(0, 'rgba(245, 158, 11, 0.35)');
+      gradMonthly.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
 
       const months = ['Set 24', 'Nov 24', 'Gen 25', 'Mar 25', 'Mag 25', 'Lug 25', 'Set 25', 'Nov 25', 'Gen 26', 'Mar 26', 'Mag 26', 'Lug 26', 'Ago 26'];
-      const prices = [80.80, 83.20, 85.50, 89.10, 92.40, 95.00, 97.22, 102.50, 110.00, 151.13, 138.50, 126.00, 122.50];
+      const monthlyPrices = [80.80, 83.20, 85.50, 89.10, 92.40, 95.00, 97.22, 102.50, 110.00, 151.13, 138.50, 126.00, 122.50];
 
-      goldChart = new Chart(ctx, {
+      monthlyChart = new Chart(ctxMonthly, {
         type: 'line',
         data: {
           labels: months,
           datasets: [
             {
-              label: 'Quotazione Oro Spot (€/g)',
-              data: prices,
+              label: 'Storico Mensile (€/g)',
+              data: monthlyPrices,
               borderColor: '#fbbf24',
               borderWidth: 3,
-              backgroundColor: goldGradient,
+              backgroundColor: gradMonthly,
               fill: true,
               tension: 0.3,
-              pointRadius: 5,
-              pointHoverRadius: 8,
+              pointRadius: 4,
+              pointHoverRadius: 7,
               pointBackgroundColor: '#fbbf24',
               pointBorderColor: '#0f172a',
               pointBorderWidth: 2
             },
             {
-              label: 'Prezzo Medio d\'Acquisto (100.80 €/g)',
+              label: 'Prezzo Medio Acquisto (100.80 €/g)',
               data: Array(months.length).fill(AVG_PURCHASE_PRICE),
               borderColor: 'rgba(245, 158, 11, 0.5)',
               borderWidth: 2,
@@ -451,49 +470,119 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          layout: { padding: { top: 25, bottom: 10, left: 10, right: 10 } },
+          layout: { padding: { top: 25, bottom: 5, left: 5, right: 5 } },
           plugins: {
-            legend: { 
-              display: true,
-              position: 'top',
-              align: 'end',
-              labels: { color: '#94a3b8', font: { size: 11 } }
-            },
+            title: { display: true, text: 'Storico Completo (Mensile)', color: '#f8fafc', font: { size: 13, weight: 'bold' } },
+            legend: { display: true, position: 'top', align: 'end', labels: { color: '#94a3b8', font: { size: 10 } } },
             tooltip: {
               backgroundColor: 'rgba(15, 23, 42, 0.95)',
               borderColor: '#fbbf24',
               borderWidth: 1,
               titleColor: '#fbbf24',
-              bodyColor: '#f8fafc',
               callbacks: {
-                label: function(context) {
-                  if (context.datasetIndex === 1) return `Soglia d'acquisto media: ${AVG_PURCHASE_PRICE.toFixed(2)} €/g`;
-                  const price = context.raw;
-                  const diff = price - AVG_PURCHASE_PRICE;
+                label: function(ctx) {
+                  if (ctx.datasetIndex === 1) return `Prezzo Medio Acquisto: ${AVG_PURCHASE_PRICE.toFixed(2)} €/g`;
+                  const p = ctx.raw;
+                  const diff = p - AVG_PURCHASE_PRICE;
                   const perc = ((diff / AVG_PURCHASE_PRICE) * 100).toFixed(1);
-                  return [
-                    `Prezzo Spot: ${price.toFixed(2)} €/g`,
-                    `Variazione su Acquisto: ${diff >= 0 ? '+' : ''}${diff.toFixed(2)} €/g (${perc >= 0 ? '+' : ''}${perc}%)`
-                  ];
+                  return [`Prezzo Spot: ${p.toFixed(2)} €/g`, `Var: ${diff >= 0 ? '+' : ''}${diff.toFixed(2)} €/g (${perc >= 0 ? '+' : ''}${perc}%)`];
                 }
               }
             },
             datalabels: {
-              align: 'top',
-              offset: 4,
-              color: '#94a3b8',
-              font: { size: 10, weight: '600' },
-              display: function(context) {
-                return context.datasetIndex === 0;
-              },
-              formatter: function(value) {
-                return value.toFixed(1) + '€';
-              }
+              align: 'top', offset: 4, color: '#94a3b8', font: { size: 9, weight: '600' },
+              display: function(ctx) { return ctx.datasetIndex === 0; },
+              formatter: function(v) { return v.toFixed(1) + '€'; }
             }
           },
           scales: {
-            x: { grid: { color: 'rgba(51, 65, 85, 0.3)' }, ticks: { color: '#94a3b8', font: { size: 11 } } },
-            y: { grid: { color: 'rgba(51, 65, 85, 0.3)' }, ticks: { color: '#94a3b8', callback: function(value) { return value + ' €/g'; } } }
+            x: { grid: { color: 'rgba(51, 65, 85, 0.3)' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+            y: { grid: { color: 'rgba(51, 65, 85, 0.3)' }, ticks: { color: '#94a3b8', callback: function(v) { return v + '€'; } } }
+          }
+        }
+      });
+
+      // --- 2. Grafico Giornaliero (Ultimi 30 Giorni) ---
+      const ctxDaily = document.getElementById('dailyChart').getContext('2d');
+      const gradDaily = ctxDaily.createLinearGradient(0, 0, 0, 350);
+      gradDaily.addColorStop(0, 'rgba(16, 185, 129, 0.3)');
+      gradDaily.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+
+      const days = [
+        '25 L', '26 L', '27 L', '28 L', '29 L', '30 L', '31 L',
+        '01 A', '02 A', '03 A', '04 A', '05 A', '06 A', '07 A',
+        '08 A', '09 A', '10 A', '11 A', '12 A', '13 A', '14 A',
+        '15 A', '16 A', '17 A', '18 A', '19 A', '20 A', '21 A', '22 A', 'Oggi'
+      ];
+
+      const dailyPrices = [
+        115.20, 115.50, 116.10, 116.80, 117.20, 116.90, 117.40,
+        118.00, 118.20, 118.90, 119.50, 119.10, 119.80, 120.30,
+        120.10, 120.50, 121.20, 121.80, 121.40, 122.10, 122.50,
+        122.30, 122.00, 122.70, 123.10, 123.50, 124.20, 123.80, 123.20, 122.50
+      ];
+
+      dailyChart = new Chart(ctxDaily, {
+        type: 'line',
+        data: {
+          labels: days,
+          datasets: [
+            {
+              label: 'Ultimi 30 Giorni (€/g)',
+              data: dailyPrices,
+              borderColor: '#10b981',
+              borderWidth: 2.5,
+              backgroundColor: gradDaily,
+              fill: true,
+              tension: 0.2,
+              pointRadius: 3,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#10b981',
+              pointBorderColor: '#0f172a',
+              pointBorderWidth: 1.5
+            },
+            {
+              label: 'Prezzo Medio Acquisto (100.80 €/g)',
+              data: Array(days.length).fill(AVG_PURCHASE_PRICE),
+              borderColor: 'rgba(245, 158, 11, 0.5)',
+              borderWidth: 2,
+              borderDash: [6, 6],
+              pointRadius: 0,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { top: 25, bottom: 5, left: 5, right: 5 } },
+          plugins: {
+            title: { display: true, text: 'Dettaglio Ultimi 30 Giorni', color: '#f8fafc', font: { size: 13, weight: 'bold' } },
+            legend: { display: true, position: 'top', align: 'end', labels: { color: '#94a3b8', font: { size: 10 } } },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              borderColor: '#10b981',
+              borderWidth: 1,
+              titleColor: '#10b981',
+              callbacks: {
+                label: function(ctx) {
+                  if (ctx.datasetIndex === 1) return `Prezzo Medio Acquisto: ${AVG_PURCHASE_PRICE.toFixed(2)} €/g`;
+                  const p = ctx.raw;
+                  const diff = p - AVG_PURCHASE_PRICE;
+                  const perc = ((diff / AVG_PURCHASE_PRICE) * 100).toFixed(1);
+                  return [`Prezzo Spot: ${p.toFixed(2)} €/g`, `Var: ${diff >= 0 ? '+' : ''}${diff.toFixed(2)} €/g (${perc >= 0 ? '+' : ''}${perc}%)`];
+                }
+              }
+            },
+            datalabels: {
+              align: 'top', offset: 4, color: '#94a3b8', font: { size: 8, weight: '600' },
+              display: function(ctx) { return ctx.datasetIndex === 0 && (ctx.dataIndex % 4 === 0 || ctx.dataIndex === dailyPrices.length - 1); },
+              formatter: function(v) { return v.toFixed(1) + '€'; }
+            }
+          },
+          scales: {
+            x: { grid: { color: 'rgba(51, 65, 85, 0.2)' }, ticks: { color: '#94a3b8', font: { size: 9 } } },
+            y: { grid: { color: 'rgba(51, 65, 85, 0.3)' }, ticks: { color: '#94a3b8', callback: function(v) { return v + '€'; } } }
           }
         }
       });
@@ -544,9 +633,14 @@
       const badgeEl = document.getElementById('gold-percentage-gain');
       badgeEl.innerText = (rawGoldGainPerc >= 0 ? '+' : '') + rawGoldGainPerc.toFixed(1) + '%';
       
-      if (goldChart) {
-        goldChart.data.datasets[0].data[goldChart.data.datasets[0].data.length - 1] = spotPricePerGram;
-        goldChart.update();
+      // Aggiorna l'ultimo punto in entrambi i grafici
+      if (monthlyChart) {
+        monthlyChart.data.datasets[0].data[monthlyChart.data.datasets[0].data.length - 1] = spotPricePerGram;
+        monthlyChart.update();
+      }
+      if (dailyChart) {
+        dailyChart.data.datasets[0].data[dailyChart.data.datasets[0].data.length - 1] = spotPricePerGram;
+        dailyChart.update();
       }
     }
 
