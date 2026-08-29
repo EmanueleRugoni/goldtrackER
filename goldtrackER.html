@@ -185,6 +185,7 @@
 
     .live-status { display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; padding: 6px 14px; border-radius: 20px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--card-border); }
     .dot { width: 9px; height: 9px; border-radius: 50%; background-color: var(--green); animation: pulse 2s infinite; }
+    .dot.stale { background-color: var(--red); animation: none; }
 
     @keyframes pulse {
       0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
@@ -225,12 +226,19 @@
       </button>
 
       <h1>Portafoglio Oro Fisico</h1>
-      <div style="margin-top: 10px;">
-        <span class="live-status">
-          <span class="dot"></span>
+      <div style="margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px;">
+        <span class="live-status" id="live-status-badge">
+          <span class="dot" id="live-dot"></span>
           Prezzo Spot Oro Live: <strong id="gold-spot-price" class="text-gold">Caricamento...</strong>
         </span>
+        <span class="live-status" id="last-update-badge" style="font-size: 0.8rem;">
+          🕒 <span id="last-update-time">--:--</span>
+        </span>
+        <span class="live-status" id="fx-rate-badge" style="font-size: 0.8rem;">
+          €/$ <strong id="fx-rate-value" class="text-gold">...</strong>
+        </span>
       </div>
+      <div id="stale-warning" style="margin-top: 8px; font-size: 0.78rem; color: var(--red); display: none;"></div>
     </header>
 
     <!-- KPI Dashboard -->
@@ -590,26 +598,68 @@
       setInterval(fetchGoldPrice, 60000);
     }
 
+    // Cache del tasso di cambio: evita di richiamare l'API del cambio ad ogni refresh (60s)
+    let cachedUsdToEur = 0.92; // fallback statico se anche l'API del cambio fallisce
+    let usdToEurFetchedAt = 0;
+    const FX_CACHE_MS = 30 * 60 * 1000; // 30 minuti
+
+    async function getUsdToEurRate() {
+      const now = Date.now();
+      if (now - usdToEurFetchedAt < FX_CACHE_MS) {
+        return cachedUsdToEur;
+      }
+      try {
+        const res = await fetch('https://api.exchangerate.host/latest?base=USD&symbols=EUR');
+        const data = await res.json();
+        const rate = data && data.rates && data.rates.EUR;
+        if (typeof rate === 'number' && rate > 0) {
+          cachedUsdToEur = rate;
+          usdToEurFetchedAt = now;
+        }
+      } catch (e) {
+        // tasso di cambio non aggiornabile: si continua a usare l'ultimo valore valido (o il fallback)
+      }
+      return cachedUsdToEur;
+    }
+
     async function fetchGoldPrice() {
       try {
         const response = await fetch('https://api.gold-api.com/price/XAU');
         const data = await response.json();
-        let pricePerGramEUR = 0;
-        
-        if (data && data.price) {
-          const usdPerGram = data.price / 31.1034768;
-          const usdToEurRate = 0.92;
-          pricePerGramEUR = usdPerGram * usdToEurRate;
-        } else {
-          throw new Error('API Error');
-        }
-        updateDashboard(pricePerGramEUR);
+
+        if (!data || !data.price) throw new Error('API Error');
+
+        const usdPerGram = data.price / 31.1034768;
+        const usdToEurRate = await getUsdToEurRate();
+        const pricePerGramEUR = usdPerGram * usdToEurRate;
+
+        updateDashboard(pricePerGramEUR, { live: true });
       } catch (error) {
-        updateDashboard(122.50);
+        updateDashboard(122.50, { live: false });
       }
     }
 
-    function updateDashboard(spotPricePerGram) {
+    function updateDashboard(spotPricePerGram, status) {
+      status = status || { live: true };
+      const dotEl = document.getElementById('live-dot');
+      const timeEl = document.getElementById('last-update-time');
+      const fxEl = document.getElementById('fx-rate-value');
+      const warningEl = document.getElementById('stale-warning');
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      timeEl.innerText = timeStr;
+      fxEl.innerText = cachedUsdToEur.toFixed(4);
+
+      if (status.live) {
+        dotEl.classList.remove('stale');
+        warningEl.style.display = 'none';
+      } else {
+        dotEl.classList.add('stale');
+        warningEl.style.display = 'block';
+        warningEl.innerText = '⚠ Dato non live (API non raggiungibile) — mostrato ultimo prezzo noto';
+      }
+
       const rebuyPricePerGram = spotPricePerGram * (1 - REBUY_SPREAD);
       const currentGrossValue = TOTAL_GRAMS * rebuyPricePerGram;
       const grossProfit = currentGrossValue - INVESTED_NET;
