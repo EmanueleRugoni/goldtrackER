@@ -1,4 +1,3 @@
-
 name: Gold hourly price
 
 # Registra ogni ora il prezzo dell'oro in €/g nel file gold-history.json (radice del repo).
