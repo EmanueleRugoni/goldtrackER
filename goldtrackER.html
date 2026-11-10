@@ -287,6 +287,16 @@
       <div class="chart-container">
         <canvas id="dailyChart"></canvas>
       </div>
+
+      <!-- 3. Grafico Andamento Orario (oggi) -->
+      <div>
+        <div class="chart-container">
+          <canvas id="hourlyChart"></canvas>
+        </div>
+        <div style="margin-top: 8px; font-size: 0.75rem; color: var(--text-muted); text-align: center;">
+          Una rilevazione per ora (ultimo valore live dell'ora), salvata nel browser: i punti si accumulano mentre la dashboard è aperta.
+        </div>
+      </div>
     </div>
 
     <!-- Tabella Storico Bonifici -->
@@ -421,16 +431,100 @@
       initDashboard();
     }
 
-    if (sessionStorage.getItem('authenticated') === 'true') {
-      unlockContent();
-    }
-
     const TOTAL_GRAMS = 397.20;
     const INVESTED_NET = 43550.00;
     const REBUY_SPREAD = 0.025;
     const AVG_PURCHASE_PRICE = 100.80;
 
-    let monthlyChart, dailyChart;
+    let monthlyChart, dailyChart, hourlyChart;
+
+    // --- Trend rispetto all'ultimo aggiornamento (freccia sul grafico 30 giorni) ---
+    let lastLiveSpot = null;   // prezzo dell'aggiornamento live precedente
+    let trendState = null;     // { dir: -1|0|1, delta, perc, refLabel }
+
+    const trendArrowPlugin = {
+      id: 'trendArrow',
+      afterDatasetsDraw(chart) {
+        if (!trendState) return;
+        const meta = chart.getDatasetMeta(0);
+        const pt = meta.data[meta.data.length - 1];
+        if (!pt) return;
+        const ctx = chart.ctx;
+        const area = chart.chartArea;
+        const color = trendState.dir > 0 ? '#10b981' : trendState.dir < 0 ? '#ef4444' : '#94a3b8';
+        const sign = trendState.delta > 0 ? '+' : '';
+
+        const ax = pt.x - 10;
+        let ay = pt.y + 26;                          // sotto l'ultimo punto
+        if (ay + 18 > area.bottom) ay = pt.y - 46;   // se non c'è spazio, sopra l'etichetta
+
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        if (trendState.dir > 0) {            // freccia verso l'alto
+          ctx.moveTo(ax, ay + 10); ctx.lineTo(ax, ay - 6);
+          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(ax, ay - 14); ctx.lineTo(ax - 7, ay - 3); ctx.lineTo(ax + 7, ay - 3);
+        } else if (trendState.dir < 0) {     // freccia verso il basso
+          ctx.moveTo(ax, ay - 10); ctx.lineTo(ax, ay + 6);
+          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(ax, ay + 14); ctx.lineTo(ax - 7, ay + 3); ctx.lineTo(ax + 7, ay + 3);
+        } else {                             // invariato: freccia orizzontale
+          ctx.moveTo(ax - 10, ay); ctx.lineTo(ax + 4, ay);
+          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(ax + 12, ay); ctx.lineTo(ax + 2, ay - 7); ctx.lineTo(ax + 2, ay + 7);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = color;
+        ctx.font = 'bold 11px "Segoe UI", system-ui, sans-serif';
+        const line1 = trendState.dir === 0
+          ? 'Invariato'
+          : `${sign}${trendState.delta.toFixed(2)} €/g (${sign}${trendState.perc.toFixed(2)}%)`;
+        ctx.fillText(line1, ax - 14, ay - 4);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '9px "Segoe UI", system-ui, sans-serif';
+        ctx.fillText('vs ' + trendState.refLabel, ax - 14, ay + 9);
+        ctx.restore();
+      }
+    };
+
+    // --- Storico orario di oggi (salvato in localStorage, 1 valore per ora) ---
+    function hourlyStorageKey() {
+      return 'goldtrack_hourly_' + new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
+    }
+
+    function loadHourlyData() {
+      const arr = Array(24).fill(null);
+      try {
+        const todayKey = hourlyStorageKey();
+        // pulizia dei giorni precedenti
+        Object.keys(localStorage).forEach(k => {
+          if (k.indexOf('goldtrack_hourly_') === 0 && k !== todayKey) localStorage.removeItem(k);
+        });
+        const saved = JSON.parse(localStorage.getItem(todayKey) || '{}');
+        Object.keys(saved).forEach(h => {
+          const i = parseInt(h, 10);
+          if (i >= 0 && i < 24 && typeof saved[h] === 'number') arr[i] = saved[h];
+        });
+      } catch (e) { /* localStorage non disponibile: il grafico parte vuoto */ }
+      return arr;
+    }
+
+    function saveHourlyPoint(hour, price) {
+      try {
+        const key = hourlyStorageKey();
+        const saved = JSON.parse(localStorage.getItem(key) || '{}');
+        saved[hour] = price;
+        localStorage.setItem(key, JSON.stringify(saved));
+      } catch (e) { /* ignora */ }
+    }
 
     function initDashboard() {
       Chart.register(ChartDataLabels);
@@ -531,6 +625,7 @@
 
       dailyChart = new Chart(ctxDaily, {
         type: 'line',
+        plugins: [trendArrowPlugin],
         data: {
           labels: days,
           datasets: [
@@ -593,6 +688,94 @@
           }
         }
       });
+
+      // --- 3. Grafico Andamento Orario (oggi) ---
+      const ctxHourly = document.getElementById('hourlyChart').getContext('2d');
+      const gradHourly = ctxHourly.createLinearGradient(0, 0, 0, 350);
+      gradHourly.addColorStop(0, 'rgba(56, 189, 248, 0.3)');
+      gradHourly.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+
+      const hourLabels = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0') + ':00');
+      const hourlyData = loadHourlyData();
+      const firstOfDay = () => {
+        const v = hourlyChart.data.datasets[0].data.find(x => x !== null);
+        return v === undefined ? null : v;
+      };
+
+      hourlyChart = new Chart(ctxHourly, {
+        type: 'line',
+        data: {
+          labels: hourLabels,
+          datasets: [
+            {
+              label: 'Prezzo Spot per ora (€/g)',
+              data: hourlyData,
+              borderColor: '#38bdf8',
+              borderWidth: 2.5,
+              backgroundColor: gradHourly,
+              fill: true,
+              tension: 0.25,
+              spanGaps: true,
+              pointRadius: 4,
+              pointHoverRadius: 7,
+              pointBackgroundColor: '#38bdf8',
+              pointBorderColor: '#0f172a',
+              pointBorderWidth: 1.5
+            },
+            {
+              label: 'Primo rilevamento del giorno',
+              data: Array(24).fill(null),
+              borderColor: 'rgba(148, 163, 184, 0.6)',
+              borderWidth: 1.5,
+              borderDash: [6, 6],
+              pointRadius: 0,
+              spanGaps: true,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { top: 25, bottom: 5, left: 5, right: 5 } },
+          plugins: {
+            title: { display: true, text: 'Andamento Orario di Oggi', color: '#f8fafc', font: { size: 13, weight: 'bold' } },
+            legend: { display: true, position: 'top', align: 'end', labels: { color: '#94a3b8', font: { size: 10 } } },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              borderColor: '#38bdf8',
+              borderWidth: 1,
+              titleColor: '#38bdf8',
+              callbacks: {
+                label: function(ctx) {
+                  if (ctx.datasetIndex === 1) return `Primo rilevamento: ${ctx.raw.toFixed(2)} €/g`;
+                  const p = ctx.raw;
+                  const ref = firstOfDay();
+                  if (ref === null) return `Prezzo Spot: ${p.toFixed(2)} €/g`;
+                  const diff = p - ref;
+                  const perc = (diff / ref) * 100;
+                  return [`Prezzo Spot: ${p.toFixed(2)} €/g`, `Var. da inizio giornata: ${diff >= 0 ? '+' : ''}${diff.toFixed(2)} €/g (${perc >= 0 ? '+' : ''}${perc.toFixed(2)}%)`];
+                }
+              }
+            },
+            datalabels: {
+              align: 'top', offset: 6, color: '#94a3b8', font: { size: 9, weight: '600' },
+              display: function(ctx) { return ctx.datasetIndex === 0 && ctx.raw !== null; },
+              formatter: function(v) { return v.toFixed(2) + '€'; }
+            }
+          },
+          scales: {
+            x: { grid: { color: 'rgba(51, 65, 85, 0.2)' }, ticks: { color: '#94a3b8', font: { size: 9 }, maxRotation: 60, autoSkip: true } },
+            y: { grace: '3%', grid: { color: 'rgba(51, 65, 85, 0.3)' }, ticks: { color: '#94a3b8', callback: function(v) { return v.toFixed(2) + '€'; } } }
+          }
+        }
+      });
+      // linea tratteggiata di riferimento (primo valore della giornata, se già presente)
+      (function () {
+        const ref = firstOfDay();
+        if (ref !== null) hourlyChart.data.datasets[1].data = Array(24).fill(ref);
+        hourlyChart.update();
+      })();
 
       fetchGoldPrice();
       setInterval(fetchGoldPrice, 60000);
@@ -687,14 +870,47 @@
         monthlyChart.update();
       }
       if (dailyChart) {
-        dailyChart.data.datasets[0].data[dailyChart.data.datasets[0].data.length - 1] = spotPricePerGram;
+        const dd = dailyChart.data.datasets[0].data;
+
+        // Trend rispetto all'ultimo aggiornamento live (al primo caricamento: rispetto a ieri)
+        if (status.live) {
+          const hasPrev = lastLiveSpot !== null;
+          const ref = hasPrev ? lastLiveSpot : dd[dd.length - 2];
+          const delta = spotPricePerGram - ref;
+          trendState = {
+            dir: Math.abs(delta) < 0.005 ? 0 : (delta > 0 ? 1 : -1),
+            delta: delta,
+            perc: (delta / ref) * 100,
+            refLabel: hasPrev ? 'ultimo aggiornamento' : 'ieri'
+          };
+          lastLiveSpot = spotPricePerGram;
+        }
+
+        dd[dd.length - 1] = spotPricePerGram;
         dailyChart.update();
+      }
+
+      // Andamento orario: salva solo dati realmente live (non il fallback)
+      if (hourlyChart && status.live) {
+        const hour = new Date().getHours();
+        const hd = hourlyChart.data.datasets[0].data;
+        hd[hour] = spotPricePerGram;
+        saveHourlyPoint(hour, spotPricePerGram);
+        const first = hd.find(x => x !== null);
+        hourlyChart.data.datasets[1].data = Array(24).fill(first);
+        hourlyChart.update();
       }
     }
 
     function manualRefresh() {
       document.getElementById('gold-spot-price').innerText = 'Aggiornamento...';
       fetchGoldPrice();
+    }
+
+    // Sblocco automatico se la sessione è già autenticata (deve stare in fondo,
+    // dopo la definizione di tutte le costanti/variabili usate da initDashboard)
+    if (sessionStorage.getItem('authenticated') === 'true') {
+      unlockContent();
     }
   </script>
 </body>
