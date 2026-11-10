@@ -678,7 +678,7 @@
             },
             datalabels: {
               align: 'top', offset: 4, color: '#94a3b8', font: { size: 8, weight: '600' },
-              display: function(ctx) { return ctx.datasetIndex === 0 && (ctx.dataIndex % 4 === 0 || ctx.dataIndex === dailyPrices.length - 1); },
+              display: function(ctx) { const n = ctx.chart.data.datasets[0].data.length; return ctx.datasetIndex === 0 && (ctx.dataIndex % 4 === 0 || ctx.dataIndex === n - 1); },
               formatter: function(v) { return v.toFixed(1) + '€'; }
             }
           },
@@ -779,6 +779,70 @@
 
       fetchGoldPrice();
       setInterval(fetchGoldPrice, 60000);
+
+      // Storico reale registrato dalla GitHub Action (gold-history.json, 1 rilevazione/ora)
+      loadGoldHistory().then(applyHistoryToCharts);
+    }
+
+    // --- Storico orario/giornaliero dal file gold-history.json (stesso sito/repo) ---
+    async function loadGoldHistory() {
+      try {
+        const r = await fetch('gold-history.json?ts=' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) return [];
+        const j = await r.json();
+        return Array.isArray(j)
+          ? j.filter(e => e && typeof e.eur_g === 'number' && e.eur_g > 0 && !isNaN(Date.parse(e.t)))
+          : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function localDateKey(d) { return d.toLocaleDateString('sv-SE'); } // YYYY-MM-DD
+
+    function applyHistoryToCharts(history) {
+      if (!history.length) return;
+      history.sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
+      const todayKey = localDateKey(new Date());
+
+      // 1) Grafico orario di oggi: riempie le ore ancora vuote con i dati registrati
+      if (hourlyChart) {
+        const hd = hourlyChart.data.datasets[0].data;
+        history.forEach(e => {
+          const d = new Date(e.t);
+          if (localDateKey(d) !== todayKey) return;
+          const h = d.getHours();
+          if (hd[h] === null) hd[h] = e.eur_g;
+        });
+        const first = hd.find(x => x !== null);
+        hourlyChart.data.datasets[1].data = Array(24).fill(first === undefined ? null : first);
+        hourlyChart.update();
+      }
+
+      // 2) Grafico 30 giorni: usa l'ultimo valore di ogni giorno passato (dati reali) quando ce ne sono almeno 2
+      if (dailyChart) {
+        const perDay = {};
+        history.forEach(e => {
+          const d = new Date(e.t);
+          const k = localDateKey(d);
+          if (k !== todayKey) perDay[k] = e.eur_g; // l'ultimo valore del giorno vince
+        });
+        const keys = Object.keys(perDay).sort().slice(-29);
+        if (keys.length >= 2) {
+          const old = dailyChart.data.datasets[0].data;
+          const current = lastLiveSpot !== null ? lastLiveSpot : old[old.length - 1];
+          const labels = keys.map(k => {
+            const [y, m, d] = k.split('-');
+            return d + '/' + m;
+          }).concat(['Oggi']);
+          dailyChart.data.labels = labels;
+          dailyChart.data.datasets[0].data = keys.map(k => perDay[k]).concat([current]);
+          dailyChart.data.datasets[1].data = Array(labels.length).fill(AVG_PURCHASE_PRICE);
+          dailyChart.options.plugins.title.text = 'Dettaglio Ultimi ' + labels.length + ' Giorni (dati reali registrati)';
+          dailyChart.data.datasets[0].label = 'Ultimi ' + labels.length + ' Giorni (€/g)';
+          dailyChart.update();
+        }
+      }
     }
 
     // Cache del tasso di cambio: evita di richiamare l'API del cambio ad ogni refresh (60s)
@@ -792,10 +856,12 @@
         return cachedUsdToEur;
       }
       try {
-        const res = await fetch('https://api.exchangerate.host/latest?base=USD&symbols=EUR');
+        // Frankfurter (tassi BCE): gratuito, senza chiave, CORS aperto
+        const res = await fetch('https://api.frankfurter.dev/v2/rate/usd/eur');
+        if (!res.ok) throw new Error('FX HTTP ' + res.status);
         const data = await res.json();
-        const rate = data && data.rates && data.rates.EUR;
-        if (typeof rate === 'number' && rate > 0) {
+        const rate = data && Number(data.rate);
+        if (rate > 0) {
           cachedUsdToEur = rate;
           usdToEurFetchedAt = now;
         }
