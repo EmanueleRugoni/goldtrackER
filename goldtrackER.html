@@ -169,6 +169,22 @@
       margin-bottom: 25px;
     }
     
+
+    /* Sezioni comprimibili (chiuse di default) */
+    details.collapsible { margin-top: 20px; }
+    details.collapsible > summary.section-title {
+      list-style: none; cursor: pointer; user-select: none;
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 12px; transition: color 0.2s ease;
+    }
+    details.collapsible > summary.section-title::-webkit-details-marker { display: none; }
+    details.collapsible > summary.section-title::after {
+      content: '▾'; margin-left: auto; color: var(--accent-gold);
+      font-size: 1.1rem; transition: transform 0.2s ease;
+    }
+    details.collapsible[open] > summary.section-title::after { transform: rotate(180deg); }
+    details.collapsible > summary.section-title:hover { color: var(--accent-gold); }
+
     .table-wrapper { width: 100%; overflow-x: auto; margin-bottom: 25px; border-radius: 16px; border: 1px solid var(--card-border); }
     table { width: 100%; border-collapse: collapse; background: var(--card-bg); backdrop-filter: blur(10px); min-width: 600px; }
     th, td { padding: 14px 18px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
@@ -294,13 +310,14 @@
           <canvas id="hourlyChart"></canvas>
         </div>
         <div style="margin-top: 8px; font-size: 0.75rem; color: var(--text-muted); text-align: center;">
-          Una rilevazione per ora (ultimo valore live dell'ora), salvata nel browser: i punti si accumulano mentre la dashboard è aperta.
+          Una rilevazione per ora: i dati registrati dalla GitHub Action si completano con i valori live letti mentre la dashboard è aperta.
         </div>
       </div>
     </div>
 
     <!-- Tabella Storico Bonifici -->
-    <h2 class="section-title" style="margin-top: 30px; margin-bottom: 12px;">1. Storico Versamenti Bancari (Bonifici Eseguiti)</h2>
+    <details class="collapsible">
+    <summary class="section-title">1. Storico Versamenti Bancari (Bonifici Eseguiti)</summary>
     <div class="table-wrapper">
       <table>
         <thead>
@@ -344,9 +361,11 @@
         </tbody>
       </table>
     </div>
+    </details>
 
     <!-- Tabella Dettaglio Oro Acquistato -->
-    <h2 class="section-title" style="margin-top: 30px; margin-bottom: 12px;">2. Dettaglio Oro Assegnato nel Deposito</h2>
+    <details class="collapsible">
+    <summary class="section-title">2. Dettaglio Oro Assegnato nel Deposito</summary>
     <div class="table-wrapper">
       <table>
         <thead>
@@ -389,6 +408,7 @@
         </tbody>
       </table>
     </div>
+    </details>
 
     <!-- Dettagli Fiscali e Riferimenti -->
     <div class="card">
