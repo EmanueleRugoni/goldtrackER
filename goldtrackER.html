@@ -718,7 +718,7 @@
       const hourLabels = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0') + ':00');
       const hourlyData = loadHourlyData();
       const firstOfDay = () => {
-        const v = hourlyChart.data.datasets[0].data.find(x => x !== null);
+        const v = hourlyChart.data.datasets[0].data.slice(1).find(x => x !== null);
         return v === undefined ? null : v;
       };
 
@@ -759,7 +759,7 @@
           maintainAspectRatio: false,
           layout: { padding: { top: 25, bottom: 5, left: 5, right: 5 } },
           plugins: {
-            title: { display: true, text: 'Andamento Orario di Oggi', color: '#f8fafc', font: { size: 13, weight: 'bold' } },
+            title: { display: true, text: 'Andamento Orario di Oggi (dalle 01:00)', color: '#f8fafc', font: { size: 13, weight: 'bold' } },
             legend: { display: true, position: 'top', align: 'end', labels: { color: '#94a3b8', font: { size: 10 } } },
             tooltip: {
               backgroundColor: 'rgba(15, 23, 42, 0.95)',
@@ -785,7 +785,7 @@
             }
           },
           scales: {
-            x: { grid: { color: 'rgba(51, 65, 85, 0.2)' }, ticks: { color: '#94a3b8', font: { size: 9 }, maxRotation: 60, autoSkip: true } },
+            x: { min: 1, grid: { color: 'rgba(51, 65, 85, 0.2)' }, ticks: { color: '#94a3b8', font: { size: 9 }, maxRotation: 60, autoSkip: true } },
             y: { grace: '3%', grid: { color: 'rgba(51, 65, 85, 0.3)' }, ticks: { color: '#94a3b8', callback: function(v) { return v.toFixed(2) + '€'; } } }
           }
         }
@@ -834,7 +834,7 @@
           const h = d.getHours();
           if (hd[h] === null) hd[h] = e.eur_g;
         });
-        const first = hd.find(x => x !== null);
+        const first = hd.slice(1).find(x => x !== null);
         hourlyChart.data.datasets[1].data = Array(24).fill(first === undefined ? null : first);
         hourlyChart.update();
       }
@@ -982,7 +982,7 @@
         const hd = hourlyChart.data.datasets[0].data;
         hd[hour] = spotPricePerGram;
         saveHourlyPoint(hour, spotPricePerGram);
-        const first = hd.find(x => x !== null);
+        const first = hd.slice(1).find(x => x !== null);
         hourlyChart.data.datasets[1].data = Array(24).fill(first);
         hourlyChart.update();
       }
