@@ -1,0 +1,81 @@
+name: Gold hourly price
+
+# Registra ogni ora il prezzo dell'oro in €/g nel file gold-history.json (radice del repo).
+# La dashboard goldtrackER.html legge quel file per il grafico orario e per i 30 giorni.
+on:
+  schedule:
+    - cron: '5 * * * *'     # ogni ora, al minuto 5 (GitHub può ritardare di qualche minuto)
+  workflow_dispatch:         # permette di lanciarlo a mano da Actions > Run workflow
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gold-hourly
+  cancel-in-progress: false
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Registra il prezzo
+        run: |
+          cat > "$RUNNER_TEMP/log-gold.mjs" <<'EOF'
+          import fs from 'node:fs';
+
+          const FILE = 'gold-history.json';
+          const GRAMS_PER_OZ = 31.1034768;
+          const KEEP_DAYS = 45;
+
+          async function getJson(url) {
+            const res = await fetch(url, { headers: { 'user-agent': 'goldtrackER-logger' } });
+            if (!res.ok) throw new Error(url + ' -> HTTP ' + res.status);
+            return res.json();
+          }
+
+          const gold = await getJson('https://api.gold-api.com/price/XAU');       // USD per oncia troy
+          const fx = await getJson('https://api.frankfurter.dev/v2/rate/usd/eur'); // tasso USD -> EUR
+
+          const usdOz = Number(gold.price);
+          const rate = Number(fx.rate);
+          if (!(usdOz > 0) || !(rate > 0)) throw new Error('Dati non validi: ' + JSON.stringify({ gold, fx }));
+
+          const eurG = (usdOz / GRAMS_PER_OZ) * rate;
+
+          let history = [];
+          try { history = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch (e) { /* primo avvio */ }
+          if (!Array.isArray(history)) history = [];
+
+          history.push({
+            t: new Date().toISOString(),
+            eur_g: Number(eurG.toFixed(3)),
+            usd_oz: Number(usdOz.toFixed(2)),
+            fx: Number(rate.toFixed(5))
+          });
+
+          const cutoff = Date.now() - KEEP_DAYS * 24 * 3600 * 1000;
+          history = history.filter(e => Date.parse(e.t) >= cutoff);
+
+          fs.writeFileSync(FILE, JSON.stringify(history) + '\n');
+          console.log('Registrato: ' + eurG.toFixed(3) + ' EUR/g (' + history.length + ' rilevazioni in archivio)');
+          EOF
+          node "$RUNNER_TEMP/log-gold.mjs"
+
+      - name: Commit del file aggiornato
+        run: |
+          if [ -z "$(git status --porcelain gold-history.json)" ]; then
+            echo "Nessuna modifica da salvare"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gold-history.json
+          git commit -m "chore: prezzo oro $(date -u +'%Y-%m-%d %H:%M') UTC"
+          git pull --rebase
+          git push
