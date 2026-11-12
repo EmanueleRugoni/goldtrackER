@@ -140,6 +140,18 @@
     .card.highlight { border-color: var(--accent-gold); background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(30, 41, 59, 0.7) 100%); }
     .card-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px; font-weight: 600; }
     .card-value { font-size: 1.8rem; font-weight: 800; }
+    .card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .card-title-row .card-title { margin-bottom: 0; }
+    .eye-btn {
+      background: none; border: 1px solid transparent; border-radius: 8px; padding: 4px 6px;
+      color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; line-height: 0;
+      transition: color 0.2s ease, border-color 0.2s ease;
+    }
+    .eye-btn:hover, .eye-btn:focus-visible { color: var(--accent-gold); border-color: var(--card-border); outline: none; }
+    .eye-btn .eye-on { display: none; }
+    .eye-btn[aria-pressed="true"] .eye-on { display: inline; }
+    .eye-btn[aria-pressed="true"] .eye-off { display: none; }
+    .card-value.secret { letter-spacing: 1px; }
     .card-subtext { font-size: 0.85rem; margin-top: 6px; }
 
     .text-green { color: var(--green); }
@@ -266,14 +278,14 @@
       </div>
 
       <div class="card">
-        <div class="card-title">Capitale Bonificato</div>
-        <div class="card-value">43.550,00 €</div>
+        <div class="card-title-row"><div class="card-title">Capitale Bonificato</div><button type="button" class="eye-btn" id="eye-capital" onclick="toggleSecret('capital')" aria-pressed="false" aria-label="Mostra capitale bonificato" title="Mostra / nascondi"><svg class="eye-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-7 0-11-7-11-7a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg><svg class="eye-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+        <div class="card-value secret" id="capital-value" data-real="43.550,00 €">••••••• €</div>
         <div class="card-subtext" style="color: var(--text-muted)">Inclusi 3.000 € DCI convertiti</div>
       </div>
 
       <div class="card highlight">
-        <div class="card-title">Valore di Vendita (Lordo)</div>
-        <div class="card-value" id="current-gross-value">... €</div>
+        <div class="card-title-row"><div class="card-title">Valore di Vendita (Lordo)</div><button type="button" class="eye-btn" id="eye-gross" onclick="toggleSecret('gross')" aria-pressed="false" aria-label="Mostra valore di vendita" title="Mostra / nascondi"><svg class="eye-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-7 0-11-7-11-7a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg><svg class="eye-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+        <div class="card-value secret" id="current-gross-value" data-real="... €">••••••• €</div>
         <div class="card-subtext" id="gross-spread-note">Netto spread di riacquisto</div>
       </div>
 
@@ -957,7 +969,8 @@
       const rawGoldGainPerc = ((spotPricePerGram - AVG_PURCHASE_PRICE) / AVG_PURCHASE_PRICE) * 100;
 
       document.getElementById('gold-spot-price').innerText = spotPricePerGram.toFixed(2) + ' €/g';
-      document.getElementById('current-gross-value').innerText = currentGrossValue.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+      document.getElementById('current-gross-value').dataset.real = currentGrossValue.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+      renderSecret('gross');
       document.getElementById('gross-spread-note').innerText = 'Stima riacquisto a ~' + rebuyPricePerGram.toFixed(2) + ' €/g (incluso spread)';
       
       const netProfitEl = document.getElementById('net-profit');
@@ -1010,6 +1023,25 @@
     function manualRefresh() {
       document.getElementById('gold-spot-price').innerText = 'Aggiornamento...';
       fetchGoldPrice();
+    }
+
+    // --- Valori sensibili nascosti all'apertura (occhio chiuso); clic sull'occhio per mostrarli ---
+    const SECRET_MASK = '••••••• €';
+    const secretVisible = { capital: false, gross: false };
+    const secretEl = { capital: 'capital-value', gross: 'current-gross-value' };
+
+    function renderSecret(key) {
+      const el = document.getElementById(secretEl[key]);
+      if (!el) return;
+      el.innerText = secretVisible[key] ? el.dataset.real : SECRET_MASK;
+    }
+
+    function toggleSecret(key) {
+      secretVisible[key] = !secretVisible[key];
+      const btn = document.getElementById('eye-' + key);
+      btn.setAttribute('aria-pressed', secretVisible[key] ? 'true' : 'false');
+      btn.setAttribute('aria-label', (secretVisible[key] ? 'Nascondi ' : 'Mostra ') + (key === 'capital' ? 'capitale bonificato' : 'valore di vendita'));
+      renderSecret(key);
     }
 
     // Sblocco automatico se la sessione è già autenticata (deve stare in fondo,
