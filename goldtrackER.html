@@ -310,7 +310,7 @@
           <canvas id="hourlyChart"></canvas>
         </div>
         <div style="margin-top: 8px; font-size: 0.75rem; color: var(--text-muted); text-align: center;">
-          Una rilevazione per ora: i dati registrati dalla GitHub Action si completano con i valori live letti mentre la dashboard è aperta.
+          Una rilevazione per ora: dati registrati dalla GitHub Action e valori live. I punti con il centro vuoto sono valori di partenza approssimati letti dal grafico 24h di OreGoldSafe.
         </div>
       </div>
     </div>
@@ -738,9 +738,9 @@
               spanGaps: true,
               pointRadius: 4,
               pointHoverRadius: 7,
-              pointBackgroundColor: '#38bdf8',
-              pointBorderColor: '#0f172a',
-              pointBorderWidth: 1.5
+              pointBackgroundColor: ctx => seedHours.has(ctx.dataIndex) ? '#0f172a' : '#38bdf8',
+              pointBorderColor: '#38bdf8',
+              pointBorderWidth: 2
             },
             {
               label: 'Primo rilevamento del giorno',
@@ -801,7 +801,25 @@
       setInterval(fetchGoldPrice, 60000);
 
       // Storico reale registrato dalla GitHub Action (gold-history.json, 1 rilevazione/ora)
-      loadGoldHistory().then(applyHistoryToCharts);
+      loadGoldHistory().then(h => { applyHistoryToCharts(h); applySeedHourly(); });
+    }
+
+    // --- Valori orari di partenza (OreGoldSafe, grafico 24h, letti il 12/11/2026 alle 18:00) ---
+    // Approssimati (±0,03 €/g) e validi solo per la data indicata: riempiono le ore ancora vuote.
+    // I dati registrati dalla Action e i valori live hanno la precedenza.
+    const HOURLY_SEED = { date: '2026-11-12', values: { 1: 115.17, 2: 115.76, 3: 115.53, 4: 115.62, 5: 115.54, 6: 115.43, 7: 115.49, 8: 115.08, 9: 114.80, 10: 113.95, 11: 114.37, 12: 114.50, 13: 114.44, 14: 113.98, 15: 112.97, 16: 112.19, 17: 112.62 } };
+    const seedHours = new Set();
+
+    function applySeedHourly() {
+      if (!hourlyChart || localDateKey(new Date()) !== HOURLY_SEED.date) return;
+      const hd = hourlyChart.data.datasets[0].data;
+      Object.keys(HOURLY_SEED.values).forEach(k => {
+        const h = parseInt(k, 10);
+        if (hd[h] === null) { hd[h] = HOURLY_SEED.values[k]; seedHours.add(h); }
+      });
+      const first = hd.slice(1).find(x => x !== null);
+      hourlyChart.data.datasets[1].data = Array(24).fill(first === undefined ? null : first);
+      hourlyChart.update();
     }
 
     // --- Storico orario/giornaliero dal file gold-history.json (stesso sito/repo) ---
@@ -981,6 +999,7 @@
         const hour = new Date().getHours();
         const hd = hourlyChart.data.datasets[0].data;
         hd[hour] = spotPricePerGram;
+        seedHours.delete(hour);
         saveHourlyPoint(hour, spotPricePerGram);
         const first = hd.slice(1).find(x => x !== null);
         hourlyChart.data.datasets[1].data = Array(24).fill(first);
